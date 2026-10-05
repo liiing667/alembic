@@ -11,6 +11,7 @@ from typing import cast
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column
+from sqlalchemy import exc
 from sqlalchemy import Float
 from sqlalchemy import Identity
 from sqlalchemy import literal_column
@@ -580,6 +581,15 @@ def visit_identity_column(
         diff, _, _ = element.impl._compare_identity_default(
             element.default, element.existing_server_default
         )
+        if not diff:
+            raise exc.CompileError(
+                "Cannot alter identity of column "
+                f"{element.table_name}.{element.column_name}: the given "
+                "Identity() options do not differ from the existing "
+                "identity options, so no identity alteration can be "
+                "rendered. Specify the identity attributes to change, "
+                "or pass server_default=None to drop the identity."
+            )
         identity = element.default
         for attr in sorted(diff):
             if attr == "always":

@@ -607,6 +607,35 @@ class OpTest(TestBase):
             existing_server_default=esd(),
         )
 
+    @combinations((False,), (True,), argnames="as_sql")
+    def test_alter_column_identity_no_difference(self, as_sql):
+        context = op_fixture("postgresql", as_sql=as_sql)
+        assert_raises_message(
+            exc.CompileError,
+            "Cannot alter identity of column job.id: the given "
+            r"Identity\(\) options do not differ from the existing "
+            "identity options",
+            op.alter_column,
+            "job",
+            "id",
+            server_default=Identity(),
+            existing_server_default=Identity(),
+            nullable=False,
+        )
+        # the failed identity alteration does not emit a truncated
+        # ALTER TABLE ... ALTER COLUMN statement
+        context.assert_("ALTER TABLE job ALTER COLUMN id SET NOT NULL")
+
+    @combinations((False,), (True,), argnames="as_sql")
+    def test_alter_column_nullable_only(self, as_sql):
+        # offline rendering and the execution path produce the same,
+        # complete statement
+        context = op_fixture("postgresql", as_sql=as_sql)
+        op.alter_column(
+            "job", "id", existing_server_default=None, nullable=False
+        )
+        context.assert_("ALTER TABLE job ALTER COLUMN id SET NOT NULL")
+
     @combinations((True,), (False,), (None,), argnames="existing_nullable")
     def test_alter_column_schema_type_unnamed(self, existing_nullable):
         context = op_fixture("mssql", native_boolean=False)
