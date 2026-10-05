@@ -465,6 +465,45 @@ class PostgresqlOpTest(TestBase):
             "ALTER TABLE t1 ALTER COLUMN some_column DROP IDENTITY"
         )
 
+    def test_alter_column_identity_column_nullable_only(self):
+        # issue #1504: changing nullability on an identity column while
+        # explicitly stating there is no existing server default must not
+        # involve identity handling at all
+        context = op_fixture("postgresql")
+        op.alter_column(
+            "t1",
+            "some_column",
+            existing_server_default=None,
+            nullable=False,
+        )
+        context.assert_(
+            "ALTER TABLE t1 ALTER COLUMN some_column SET NOT NULL"
+        )
+
+    def test_alter_column_identity_no_changes_raises(self):
+        context = op_fixture("postgresql")
+        assert_raises_message(
+            exc.CompileError,
+            "cannot render an ALTER IDENTITY statement without a clause",
+            op.alter_column,
+            "t1",
+            "some_column",
+            server_default=Identity(),
+            existing_server_default=Identity(),
+        )
+
+    def test_alter_column_identity_non_identity_existing_raises(self):
+        context = op_fixture("postgresql")
+        assert_raises_message(
+            exc.CompileError,
+            "existing_server_default must be an Identity construct",
+            op.alter_column,
+            "t1",
+            "some_column",
+            server_default=Identity(),
+            existing_server_default="nextval('t1_some_column_seq'::regclass)",
+        )
+
     @combinations(
         ({}, dict(always=True), "SET GENERATED ALWAYS"),
         (

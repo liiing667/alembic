@@ -11,6 +11,7 @@ from typing import cast
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column
+from sqlalchemy import exc
 from sqlalchemy import Float
 from sqlalchemy import Identity
 from sqlalchemy import literal_column
@@ -576,10 +577,30 @@ def visit_identity_column(
         text += compiler.visit_identity_column(element.default)
         return text
     else:
-        # alter identity
+        # alter identity; the existing construct must itself be an
+        # identity, otherwise there is no way to produce a valid ALTER
+        # IDENTITY statement from the arguments given (see issue #1504)
+        if not isinstance(element.existing_server_default, Identity):
+            raise exc.CompileError(
+                "Cannot alter identity options of column "
+                f"{element.table_name}.{element.column_name}: "
+                "existing_server_default must be an Identity construct "
+                "when server_default is an Identity; got "
+                f"{element.existing_server_default!r}.  Pass "
+                "existing_server_default=None to add an identity to the "
+                "column, or first remove the existing default explicitly."
+            )
+
         diff, _, _ = element.impl._compare_identity_default(
             element.default, element.existing_server_default
         )
+        if not diff:
+            raise exc.CompileError(
+                "No identity options on column "
+                f"{element.table_name}.{element.column_name} differ from "
+                "existing_server_default; cannot render an ALTER "
+                "IDENTITY statement without a clause."
+            )
         identity = element.default
         for attr in sorted(diff):
             if attr == "always":
